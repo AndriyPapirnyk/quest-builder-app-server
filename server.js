@@ -110,7 +110,6 @@ app.get("/protected", authMiddleware, (req, res) => {
 app.post("/quizzes", authMiddleware, async (req, res) => {
   try {
     const { title, description, questions } = req.body;
-    console.log(req.body); // Перевірка даних, що приходять на сервер
 
     if (!req.user || !req.user.userId) { // Використовуємо req.user.userId
       return res.status(400).json({ error: "Не вдалося отримати дані користувача" });
@@ -131,16 +130,17 @@ app.post("/quizzes", authMiddleware, async (req, res) => {
 });
 
 
+app.get('/quizzes', async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 5;
+  const skip = (page - 1) * limit;
 
-// Отримання всіх вікторин
-app.get("/quizzes", async (req, res) => {
-  try {
-    const quizzes = await Quiz.find();
-    res.json(quizzes);
-  } catch (error) {
-    res.status(500).json({ error: "Помилка отримання вікторин" });
-  }
+  const totalQuizzes = await Quiz.countDocuments();
+  const quizzes = await Quiz.find().skip(skip).limit(limit);
+
+  res.json({ quizzes, totalPages: Math.ceil(totalQuizzes / limit) });
 });
+
 
 // Отримання конкретної вікторини
 app.get("/quizzes/:id", async (req, res) => {
@@ -171,9 +171,11 @@ app.put("/quizzes/:id", authMiddleware, async (req, res) => {
 // Видалення вікторини (тільки автор)
 app.delete("/quizzes/:id", authMiddleware, async (req, res) => {
   try {
+    console.log(req.params.id);
     const quiz = await Quiz.findById(req.params.id);
+    console.log(quiz);
     if (!quiz) return res.status(404).json({ error: "Вікторина не знайдена" });
-    if (quiz.createdBy.toString() !== req.user.id) return res.status(403).json({ error: "Доступ заборонено" });
+    if (quiz.createdBy.toString() !== req.user.userId) return res.status(403).json({ error: "Доступ заборонено" });
 
     await quiz.deleteOne();
     res.json({ message: "Вікторина видалена" });
