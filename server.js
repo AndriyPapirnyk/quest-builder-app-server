@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 8000;
 const url = process.env.MONGODB_URL;
 
 const corsOptions = {
-  origin: 'http://localhost:5173', 
+  origin: ['http://localhost:5173', 'https://quest-builder-app-client.vercel.app'], 
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true 
