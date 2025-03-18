@@ -46,11 +46,18 @@ const UserSchema = new mongoose.Schema({
 });
 
 const quizSchema = new mongoose.Schema({
-  title: String,
-  description: String,
-  questions: Array,
-  createdBy: mongoose.Schema.Types.ObjectId,
+  title: { type: String, required: true },
+  description: { type: String, required: true },
+  questions: [{
+    text: { type: String, required: true },
+    type: { type: String, required: true },
+    options: { type: [String], required: true },
+    correctAnswers: { type: [String], required: true },
+  }],
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  completions: { type: Number, default: 0 }, 
 });
+
 
 const User = mongoose.model("User", UserSchema);
 const Quiz = mongoose.model("Quiz", quizSchema);
@@ -111,16 +118,37 @@ app.post("/quizzes", authMiddleware, async (req, res) => {
   try {
     const { title, description, questions } = req.body;
 
-    if (!req.user || !req.user.userId) { // Використовуємо req.user.userId
+    // console.log("Received questions:", questions);
+
+    if (!req.user || !req.user.userId) {
       return res.status(400).json({ error: "Не вдалося отримати дані користувача" });
     }
+
+    const parsedQuestions = Array.isArray(questions) ? questions : JSON.parse(questions);
+
+    // console.log("Processed questions:", parsedQuestions);
+
+    console.log("Mapped questions:", parsedQuestions.map(q => ({
+      text: q.text,
+      type: q.type,
+      options: q.options || [],
+      correctAnswers: Array.isArray(q.correctAnswers) ? q.correctAnswers : [q.correctAnswers],
+    })));
 
     const newQuiz = new Quiz({
       title,
       description,
-      questions,
-      createdBy: req.user.userId, // Використовуємо req.user.userId
+      questions: parsedQuestions.map(q => ({
+        text: q.text,
+        type: q.type,
+        options: q.options || [],
+        correctAnswers: Array.isArray(q.correctAnswers) ? q.correctAnswers : [q.correctAnswers],
+      })),
+      createdBy: req.user.userId,
     });
+
+    console.log(newQuiz);
+
     await newQuiz.save();
     res.status(201).json({ message: "Вікторина створена", quiz: newQuiz });
   } catch (error) {
@@ -158,15 +186,32 @@ app.put("/quizzes/:id", authMiddleware, async (req, res) => {
   try {
     const quiz = await Quiz.findById(req.params.id);
     if (!quiz) return res.status(404).json({ error: "Вікторина не знайдена" });
-    if (quiz.createdBy.toString() !== req.user.id) return res.status(403).json({ error: "Доступ заборонено" });
 
-    Object.assign(quiz, req.body);
+    if (quiz.createdBy.toString() !== req.user.userId) {
+      return res.status(403).json({ error: "Доступ заборонено" });
+    }
+
+    // Переконуємось, що `correctAnswers` завжди масив  
+    const updatedQuestions = req.body.questions.map(q => ({
+      text: q.text,
+      type: q.type,
+      options: q.options || [],
+      correctAnswers: Array.isArray(q.correctAnswers) ? q.correctAnswers : [q.correctAnswers],
+    }));
+
+    // Оновлення вікторини  
+    quiz.title = req.body.title;
+    quiz.description = req.body.description;
+    quiz.questions = updatedQuestions;
+
     await quiz.save();
     res.json({ message: "Вікторина оновлена", quiz });
   } catch (error) {
+    console.error("Помилка оновлення вікторини:", error);
     res.status(500).json({ error: "Помилка оновлення вікторини" });
   }
 });
+
 
 // Видалення вікторини (тільки автор)
 app.delete("/quizzes/:id", authMiddleware, async (req, res) => {
@@ -181,6 +226,44 @@ app.delete("/quizzes/:id", authMiddleware, async (req, res) => {
     res.json({ message: "Вікторина видалена" });
   } catch (error) {
     res.status(500).json({ error: "Помилка видалення вікторини" });
+  }
+});
+
+app.post("/quizzes/:id/submit", async (req, res) => {
+  try {
+    const { answers, timeSpent } = req.body;
+    const quiz = await Quiz.findById(req.params.id);
+    if (!quiz) return res.status(404).json({ message: "Quiz not found" });
+
+    let correctCount = 0;
+    let correctAnswers = [];
+
+    quiz.questions.forEach((q, index) => {
+      const correct = Array.isArray(q.correctAnswers) ? q.correctAnswers : [q.correctAnswers];
+      const userAnswer = Array.isArray(answers[index]) ? answers[index] : [answers[index]];
+
+      const isCorrect = correct.sort().toString() === userAnswer.sort().toString();
+      if (isCorrect) correctCount++;
+
+      correctAnswers.push({
+        question: q.text,
+        correct: isCorrect,
+        correctAnswer: correct.join(", "),
+      });
+    });
+
+    quiz.completions += 1;
+    await quiz.save();
+
+    res.json({
+      message: "Quiz completed!",
+      correctAnswers,
+      correctCount,
+      totalQuestions: quiz.questions.length,
+      timeSpent,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
   }
 });
 
