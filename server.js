@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 8000;
 const url = process.env.MONGODB_URL;
 
 const corsOptions = {
-  origin: 'http://localhost:5173', // Замість цього вказуємо адресу вашого фронтенду
+  origin: 'http://localhost:5173', 
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true 
@@ -35,10 +35,7 @@ async function connect() {
     console.error(`Connection error: ${error}`);
   }
 };
-
 connect();
-
-// user schema 
 
 const UserSchema = new mongoose.Schema({
   username: String,
@@ -63,8 +60,7 @@ const User = mongoose.model("User", UserSchema);
 const Quiz = mongoose.model("Quiz", quizSchema);
 
 
-// registration
-
+// Registration
 app.post("/register", async (req, res) => {
   const { username, password } = req.body;
   const hashedPassword = await bcrypt.hash(password, 10);
@@ -78,7 +74,7 @@ app.post("/register", async (req, res) => {
   }
 });
 
-// Логін
+// Login
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
   const user = await User.findOne({ username });
@@ -92,11 +88,9 @@ app.post("/login", async (req, res) => {
   res.json({ token });
 });
 
-// Перевірка аутентифікації
 const authMiddleware = (req, res, next) => {
   const token = req.header("Authorization");
   if (!token) return res.status(403).json({ error: "Доступ заборонено" });
-
   try {
     const decoded = jwt.verify(token.replace("Bearer ", ""), process.env.JWT_SECRET);
     req.user = decoded;
@@ -107,7 +101,6 @@ const authMiddleware = (req, res, next) => {
   }
 };
 
-// Захищений маршрут
 app.get("/protected", authMiddleware, (req, res) => {
   res.json({ message: "Ви маєте доступ" });
 });
@@ -118,16 +111,11 @@ app.post("/quizzes", authMiddleware, async (req, res) => {
   try {
     const { title, description, questions } = req.body;
 
-    // console.log("Received questions:", questions);
-
     if (!req.user || !req.user.userId) {
       return res.status(400).json({ error: "Не вдалося отримати дані користувача" });
     }
 
     const parsedQuestions = Array.isArray(questions) ? questions : JSON.parse(questions);
-
-    // console.log("Processed questions:", parsedQuestions);
-
     console.log("Mapped questions:", parsedQuestions.map(q => ({
       text: q.text,
       type: q.type,
@@ -146,9 +134,6 @@ app.post("/quizzes", authMiddleware, async (req, res) => {
       })),
       createdBy: req.user.userId,
     });
-
-    console.log(newQuiz);
-
     await newQuiz.save();
     res.status(201).json({ message: "Вікторина створена", quiz: newQuiz });
   } catch (error) {
@@ -157,20 +142,15 @@ app.post("/quizzes", authMiddleware, async (req, res) => {
   }
 });
 
-
 app.get('/quizzes', async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 5;
   const skip = (page - 1) * limit;
-
   const totalQuizzes = await Quiz.countDocuments();
   const quizzes = await Quiz.find().skip(skip).limit(limit);
-
   res.json({ quizzes, totalPages: Math.ceil(totalQuizzes / limit) });
 });
 
-
-// Отримання конкретної вікторини
 app.get("/quizzes/:id", async (req, res) => {
   try {
     const quiz = await Quiz.findById(req.params.id);
@@ -181,7 +161,6 @@ app.get("/quizzes/:id", async (req, res) => {
   }
 });
 
-// Оновлення вікторини (тільки автор)
 app.put("/quizzes/:id", authMiddleware, async (req, res) => {
   try {
     const quiz = await Quiz.findById(req.params.id);
@@ -191,7 +170,6 @@ app.put("/quizzes/:id", authMiddleware, async (req, res) => {
       return res.status(403).json({ error: "Доступ заборонено" });
     }
 
-    // Переконуємось, що `correctAnswers` завжди масив  
     const updatedQuestions = req.body.questions.map(q => ({
       text: q.text,
       type: q.type,
@@ -199,7 +177,6 @@ app.put("/quizzes/:id", authMiddleware, async (req, res) => {
       correctAnswers: Array.isArray(q.correctAnswers) ? q.correctAnswers : [q.correctAnswers],
     }));
 
-    // Оновлення вікторини  
     quiz.title = req.body.title;
     quiz.description = req.body.description;
     quiz.questions = updatedQuestions;
@@ -213,7 +190,6 @@ app.put("/quizzes/:id", authMiddleware, async (req, res) => {
 });
 
 
-// Видалення вікторини (тільки автор)
 app.delete("/quizzes/:id", authMiddleware, async (req, res) => {
   try {
     console.log(req.params.id);
